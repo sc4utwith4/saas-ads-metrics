@@ -124,3 +124,25 @@ npm run dev        # Desenvolvimento
 npm run build      # Build de produção
 npm run lint       # Lint do código
 ```
+
+## Como Fazer o Deploy no Vercel
+
+### 1. Criar o Repositório no GitHub
+Como o Git local já está inicializado e configurado com a branch `main` e a origem `sc4uthwith4`, basta seguir estes passos:
+1. Vá até o seu GitHub e crie um novo repositório chamado `saas-ads-metrics`.
+2. Após criar, execute o seguinte comando no terminal do seu computador para enviar o código:
+   ```bash
+   git push -u origin main
+   ```
+
+### 2. Importar no Vercel
+1. Vá para o painel do [Vercel](https://vercel.com) e clique em **Add New... → Project**.
+2. Conecte sua conta do GitHub e importe o repositório `saas-ads-metrics`.
+3. Nas configurações do projeto (antes de clicar em Deploy), abra a seção **Environment Variables** (Variáveis de Ambiente) e adicione as seguintes chaves do seu arquivo `.env.local`:
+   - `FACEBOOK_ACCESS_TOKEN`
+   - `FACEBOOK_AD_ACCOUNT_ID`
+   - `NEXT_PUBLIC_SUPABASE_URL`
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - `SUPABASE_SERVICE_ROLE_KEY`
+   - `SYNC_SECRET` (segredo opcional para proteger o endpoint de sincronização)
+4. Clique em **Deploy**. A plataforma do Vercel fará a compilação e disponibilizará seu dashboard online em poucos segundos.
