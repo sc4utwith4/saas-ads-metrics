@@ -16,7 +16,11 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { syncDailyInsights, syncBreakdownInsights } from '@/lib/meta-api';
+import { getRequestContext } from '@/lib/auth/profile';
 import type { InsightLevel, BreakdownType } from '@/types/meta';
+
+export const runtime = 'nodejs';
+export const maxDuration = 60;
 
 // ---------------------------------------------------------------------------
 // Validação simples do token de acesso interno
@@ -25,10 +29,15 @@ import type { InsightLevel, BreakdownType } from '@/types/meta';
 const SYNC_SECRET = process.env.SYNC_SECRET;
 
 export async function POST(req: NextRequest) {
-  // Verificação de segurança (opcional, mas recomendada para produção)
+  // Apenas admin pode disparar sync manual.
+  const { user, role } = await getRequestContext();
+  if (!user) return NextResponse.json({ error: 'Não autenticado.' }, { status: 401 });
+  if (role !== 'admin') return NextResponse.json({ error: 'Acesso restrito.' }, { status: 403 });
+
+  // Verificação adicional opcional por segredo (defense-in-depth).
   if (SYNC_SECRET) {
     const authHeader = req.headers.get('x-sync-secret');
-    if (authHeader !== SYNC_SECRET) {
+    if (authHeader && authHeader !== SYNC_SECRET) {
       return NextResponse.json({ error: 'Não autorizado.' }, { status: 401 });
     }
   }

@@ -16,8 +16,13 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/server';
+import { getRequestContext } from '@/lib/auth/profile';
 
 export async function GET(req: NextRequest) {
+  const { user, role } = await getRequestContext();
+  if (!user) return NextResponse.json({ error: 'Não autenticado.' }, { status: 401 });
+  if (role !== 'admin') return NextResponse.json({ error: 'Acesso restrito.' }, { status: 403 });
+
   const { searchParams } = req.nextUrl;
 
   const dateStart = searchParams.get('dateStart');

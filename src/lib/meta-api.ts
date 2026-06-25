@@ -10,6 +10,7 @@
 // =============================================================================
 
 import { supabaseAdmin } from '@/lib/supabase/server';
+import { getActiveMetaCredentials, type MetaCredentials } from '@/lib/meta/credentials';
 import type {
   MetaInsightRaw,
   MetaApiResponse,
@@ -22,13 +23,7 @@ import type {
   SyncLogRow,
 } from '@/types/meta';
 
-// ---------------------------------------------------------------------------
-// Configuração — lidas do .env no servidor
-// ---------------------------------------------------------------------------
-const ACCESS_TOKEN = process.env.FACEBOOK_ACCESS_TOKEN!;
-const AD_ACCOUNT_ID = process.env.FACEBOOK_AD_ACCOUNT_ID!;
-const API_VERSION = process.env.META_API_VERSION || 'v19.0';
-const BASE_URL = `https://graph.facebook.com/${API_VERSION}`;
+// Credenciais resolvidas em runtime a partir da conexão ATIVA (banco → .env).
 
 // Campos solicitados ao endpoint de insights
 const INSIGHT_FIELDS = [
@@ -167,12 +162,13 @@ function transformToBreakdown(
 // Busca UMA página de dados da Meta API
 // ---------------------------------------------------------------------------
 async function fetchInsightsPage(
-  params: FetchInsightsParams
+  params: FetchInsightsParams,
+  creds: MetaCredentials,
 ): Promise<MetaApiResponse> {
   const { dateStart, dateStop, level, breakdown, after } = params;
 
-  const url = new URL(`${BASE_URL}/act_${AD_ACCOUNT_ID}/insights`);
-  url.searchParams.set('access_token', ACCESS_TOKEN);
+  const url = new URL(`${creds.baseUrl}/act_${creds.adAccountId}/insights`);
+  url.searchParams.set('access_token', creds.accessToken);
   url.searchParams.set('fields', INSIGHT_FIELDS);
   url.searchParams.set('level', level);
   url.searchParams.set('time_range', JSON.stringify({ since: dateStart, until: dateStop }));
@@ -214,7 +210,8 @@ async function fetchInsightsPage(
 // Busca TODOS os dados com paginação automática
 // ---------------------------------------------------------------------------
 async function fetchAllInsights(
-  params: Omit<FetchInsightsParams, 'after'>
+  params: Omit<FetchInsightsParams, 'after'>,
+  creds: MetaCredentials,
 ): Promise<MetaInsightRaw[]> {
   const allData: MetaInsightRaw[] = [];
   let after: string | undefined;
@@ -222,7 +219,7 @@ async function fetchAllInsights(
   const MAX_PAGES = 50; // safety limit
 
   do {
-    const response = await fetchInsightsPage({ ...params, after });
+    const response = await fetchInsightsPage({ ...params, after }, creds);
     allData.push(...response.data);
     after = response.paging?.cursors?.after;
     pageCount++;
@@ -245,6 +242,9 @@ export async function syncDailyInsights(
 ): Promise<{ upserted: number; errors: number }> {
   console.log(`[meta-api] Iniciando sync diário: ${dateStart} → ${dateStop} | nível: ${level}`);
 
+  const creds = await getActiveMetaCredentials();
+  console.log(`[meta-api] Conta ativa: ${creds.label} (act_${creds.adAccountId})`);
+
   // Inicia log no banco
   const { data: logData } = await supabaseAdmin
     .from('sync_logs')
@@ -261,7 +261,7 @@ export async function syncDailyInsights(
   const logId = logData?.id;
 
   try {
-    const rawData = await fetchAllInsights({ dateStart, dateStop, level });
+    const rawData = await fetchAllInsights({ dateStart, dateStop, level }, creds);
 
     if (rawData.length === 0) {
       console.log('[meta-api] Nenhum dado retornado pela API.');
@@ -327,6 +327,8 @@ export async function syncBreakdownInsights(
     `[meta-api] Iniciando sync breakdown: ${dateStart} → ${dateStop} | nível: ${level} | breakdown: ${breakdown}`
   );
 
+  const creds = await getActiveMetaCredentials();
+
   const { data: logData } = await supabaseAdmin
     .from('sync_logs')
     .insert({
@@ -342,7 +344,7 @@ export async function syncBreakdownInsights(
   const logId = logData?.id;
 
   try {
-    const rawData = await fetchAllInsights({ dateStart, dateStop, level, breakdown });
+    const rawData = await fetchAllInsights({ dateStart, dateStop, level, breakdown }, creds);
 
     if (rawData.length === 0) {
       await updateSyncLog(logId, 'success', 0);
