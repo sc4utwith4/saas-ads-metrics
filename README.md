@@ -128,7 +128,7 @@ npm run lint       # Lint do código
 ## Como Fazer o Deploy no Vercel
 
 ### 1. Criar o Repositório no GitHub
-Como o Git local já está inicializado e configurado com a branch `main` e a origem `sc4uthwith4`, basta seguir estes passos:
+Como o Git local já está inicializado e configurado com a branch `main` e a origem `sc4utwith4`, basta seguir estes passos:
 1. Vá até o seu GitHub e crie um novo repositório chamado `saas-ads-metrics`.
 2. Após criar, execute o seguinte comando no terminal do seu computador para enviar o código:
    ```bash
