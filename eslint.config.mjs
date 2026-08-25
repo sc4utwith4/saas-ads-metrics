@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Projeto independente, com config e dependências próprias.
+    "faculdade/**",
   ]),
 ]);
 

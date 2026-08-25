@@ -1,5 +1,9 @@
 # SaaS Ads Metrics — Facebook Ads Dashboard
 
+> **Nota:** a pasta [`faculdade/`](faculdade/) é um projeto **separado e independente**
+> (site pessoal de estudos), com `package.json`, banco e deploy próprios. Ela não faz
+> parte deste dashboard e não é usada por ele — veja o [README dela](faculdade/README.md).
+
 Dashboard de Métricas de Tráfego focado em Facebook Ads, construído com Next.js 15, Supabase e Meta Marketing API.
 
 ## Stack Tecnológica
