@@ -14,7 +14,7 @@ export const maxDuration = 60;
 
 function authorized(req: NextRequest): boolean {
   const secret = process.env.CRON_SECRET;
-  if (!secret) return true; // sem segredo configurado → não bloqueia (dev)
+  if (!secret) return process.env.NODE_ENV !== 'production'; // sem segredo: só libera em dev
   const auth = req.headers.get('authorization') || '';
   const qs = req.nextUrl.searchParams.get('secret') || '';
   return auth === `Bearer ${secret}` || qs === secret;

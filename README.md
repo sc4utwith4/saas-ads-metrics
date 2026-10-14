@@ -1,148 +1,97 @@
-# SaaS Ads Metrics — Facebook Ads Dashboard
+# Ads Metrics
 
-Dashboard de Métricas de Tráfego focado em Facebook Ads, construído com Next.js 15, Supabase e Meta Marketing API.
+Plataforma SaaS para gestores de tráfego acompanharem e operarem contas de Facebook e Instagram Ads. Junta um dashboard de métricas da Meta, um portal de leitura para o cliente final e um assistente de IA que **analisa e executa ações reais** na conta de anúncios, sempre com confirmação do usuário.
 
-## Stack Tecnológica
+**[Aplicação em produção →](https://saas-ads-metrics.vercel.app)** · acesso por login · [documento técnico (PDF)](Entrega-Ads-Metrics.pdf)
 
-| Camada | Tecnologia |
-|--------|-----------|
-| Framework | Next.js 15 (App Router) |
-| Linguagem | TypeScript |
-| Estilização | Tailwind CSS + shadcn/ui |
-| Gráficos | Recharts |
-| Banco de Dados | Supabase (PostgreSQL) |
-| API | Meta Marketing API (Graph API v19.0+) |
+![Next.js](https://img.shields.io/badge/Next.js_16-000000?logo=nextdotjs&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)
+![Supabase](https://img.shields.io/badge/Supabase-3FCF8E?logo=supabase&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?logo=postgresql&logoColor=white)
+![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS_4-06B6D4?logo=tailwindcss&logoColor=white)
+![Gemini](https://img.shields.io/badge/Gemini_2.5-8E75B2?logo=googlegemini&logoColor=white)
+![Vercel](https://img.shields.io/badge/Vercel-000000?logo=vercel&logoColor=white)
 
-## Estrutura do Projeto
+## Funcionalidades
+
+- **Dashboard ao vivo** com gasto, impressões, cliques, CTR, CPM, CPC, conversões e ROAS, batendo com os números do Gerenciador de Anúncios
+- **Multi-conta:** conecta várias contas de anúncio pela interface e troca a conta ativa sem redeploy
+- **Dois perfis:** o administrador opera tudo; o cliente acessa um portal isolado, só de leitura, com os dados da própria conta
+- **Assistente de IA com tool use:** 16 ferramentas sobre a Meta Marketing API. As de leitura rodam sozinhas; as de escrita (pausar, ativar, ajustar orçamento, criar campanha) passam por um card de confirmação, e campanhas novas nascem pausadas
+- **IA multimodal:** analisa criativos (imagem), áudios e PDFs enviados no chat
+- **Detecção de anomalias:** compara os últimos 7 dias com os 7 anteriores por campanha e classifica em crítico, atenção ou oportunidade
+- **Relatório semanal automático** gerado pela IA toda segunda-feira via Vercel Cron
+- **Sincronização** de métricas diárias e breakdowns (idade, gênero, plataforma, posicionamento, dispositivo) para o banco
+
+## Arquitetura
 
 ```
-saas-ads-metrics/
-├── schema.sql                          # Schema do Supabase (rode no SQL Editor)
-├── .env.local                          # Variáveis de ambiente (NÃO commitar)
-└── src/
-    ├── app/
-    │   ├── api/
-    │   │   ├── sync/route.ts           # POST /api/sync — dispara sincronização
-    │   │   └── insights/route.ts       # GET /api/insights — consulta dados
-    │   └── page.tsx                    # Dashboard principal
-    ├── lib/
-    │   ├── meta-api.ts                 # Serviço de extração e sync com Meta API
-    │   ├── utils.ts                    # Utilitários gerais
-    │   └── supabase/
-    │       ├── server.ts               # Cliente Supabase (service_role - server only)
-    │       └── client.ts               # Cliente Supabase (anon - client side)
-    └── types/
-        └── meta.ts                     # Tipos TypeScript para Meta API + DB
+                    ┌───────────────────────────── Next.js 16 (Vercel) ─────────────────────────────┐
+  navegador ──────▶ │ proxy.ts  sessão Supabase + roteamento por papel (admin → app, cliente → portal)│
+                    │                                                                               │
+                    │ App Router (RSC)            Route Handlers /api                               │
+                    │  ├─ (app)/  dashboard,       ├─ insights, insights/live, anomalies            │
+                    │  │  campanhas, anúncios,     ├─ ai/chat ──▶ loop de tool use ──▶ ai/execute   │
+                    │  │  assistente, relatórios   ├─ meta/connections (multi-conta)                │
+                    │  └─ portal/  visão cliente   ├─ client/*  (escopo da conta do cliente)        │
+                    │                              └─ cron/*    (CRON_SECRET)                       │
+                    └──────────────┬──────────────────────────┬──────────────────────┬──────────────┘
+                                   │                          │                      │
+                          Supabase (Postgres + Auth)   Meta Marketing API      Gemini 2.5 Flash
+                          RLS em todas as tabelas      Graph API               retry + fallback
 ```
 
-## Configuração Inicial
+**Decisões que valem destaque:**
 
-### 1. Supabase
+- **Menor privilégio por padrão.** Só é admin quem tem `role = 'admin'` explícito no `app_metadata`; qualquer outro usuário logado é tratado como cliente. O roteamento por papel acontece no `proxy.ts`, antes de qualquer página.
+- **Chaves só no servidor.** O cliente `service_role` do Supabase existe apenas em código de servidor. Tokens da Meta são guardados na tabela `meta_connections`, acessível só pelo backend, e mascarados na interface.
+- **IA que age com freio.** O modelo nunca recebe permissão de escrita direta: ele propõe a ação, o frontend mostra o card e só `/api/ai/execute` executa depois do clique. O assistente do cliente é somente leitura e restrito à conta dele.
+- **Headers de segurança** (CSP, HSTS, X-Frame-Options, Permissions-Policy) em `next.config.ts`, **rate limiting** nas rotas de IA e endpoints de cron que exigem segredo em produção.
+- **Schema versionado** em `schema.sql` + `migrations/`, com RLS em todas as tabelas.
 
-1. Crie um projeto em [supabase.com](https://supabase.com)
-2. No SQL Editor do painel, rode o arquivo `schema.sql`
-3. Em **Project Settings → API**, copie:
-   - `Project URL` → `NEXT_PUBLIC_SUPABASE_URL`
-   - `anon public` key → `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-   - `service_role` key → `SUPABASE_SERVICE_ROLE_KEY`
+## Estrutura
 
-### 2. Variáveis de Ambiente
+```
+src/
+├── proxy.ts                 # sessão + autorização por papel
+├── app/
+│   ├── (app)/               # telas do admin e portal do cliente
+│   ├── login/
+│   └── api/                 # route handlers (insights, ai, meta, clients, cron, reports, sync)
+├── components/              # UI (dashboard, portal, assistente, conexões, relatórios)
+└── lib/
+    ├── ai/                  # cliente Gemini, ferramentas, contexto, relatório semanal
+    ├── meta/                # credenciais, ações de escrita, visão geral
+    ├── meta-api.ts          # extração e sincronização de insights
+    ├── insights/anomalies.ts
+    ├── security/rateLimit.ts
+    └── supabase/            # clientes server (service_role) e browser (anon)
+migrations/                  # 002–005: conversas, relatórios, conexões, perfis
+schema.sql                   # tabelas base: campanhas, conjuntos, anúncios, insights, logs
+```
 
-Edite o arquivo `.env.local` na raiz do projeto:
+## Rodando localmente
 
 ```bash
-# Facebook
-FACEBOOK_ACCESS_TOKEN=seu_token_aqui
-FACEBOOK_AD_ACCOUNT_ID=seu_account_id_aqui
-
-# Supabase
-NEXT_PUBLIC_SUPABASE_URL=https://xxxx.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJh...
-SUPABASE_SERVICE_ROLE_KEY=eyJh...
-
-# Opcional: protege o endpoint /api/sync
-SYNC_SECRET=um_segredo_forte_aqui
-```
-
-### 3. Rodar o projeto
-
-```bash
+npm install
+cp .env.example .env.local   # veja as variáveis abaixo
 npm run dev
 ```
 
-## Como Usar a API de Sincronização
+No SQL Editor do Supabase, rode `schema.sql` e depois os arquivos de `migrations/` em ordem.
 
-### Sincronizar métricas diárias por campanha (sem breakdown)
+| Variável | Uso |
+|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` | cliente do navegador |
+| `SUPABASE_SERVICE_ROLE_KEY` | operações de servidor (nunca exposta ao browser) |
+| `GEMINI_API_KEY` | assistente e relatórios |
+| `FACEBOOK_ACCESS_TOKEN` / `FACEBOOK_AD_ACCOUNT_ID` | conta padrão, se nenhuma conexão estiver ativa |
+| `META_API_VERSION` | versão da Graph API (opcional) |
+| `CRON_SECRET` | protege `/api/cron/*` |
+| `SYNC_SECRET` | camada extra no `/api/sync` (opcional) |
 
-```bash
-curl -X POST http://localhost:3000/api/sync \
-  -H "Content-Type: application/json" \
-  -d '{"dateStart":"2024-01-01","dateStop":"2024-01-31","level":"campaign"}'
-```
+## Roadmap
 
-### Sincronizar com breakdown por idade
-
-```bash
-curl -X POST http://localhost:3000/api/sync \
-  -H "Content-Type: application/json" \
-  -d '{"dateStart":"2024-01-01","dateStop":"2024-01-31","level":"campaign","breakdown":"age"}'
-```
-
-### Consultar dados sincronizados
-
-```bash
-curl "http://localhost:3000/api/insights?dateStart=2024-01-01&dateStop=2024-01-31&level=campaign"
-```
-
-## Métricas Disponíveis
-
-| Métrica | Coluna | Descrição |
-|---------|--------|-----------|
-| Impressões | `impressions` | Total de vezes que o anúncio foi exibido |
-| Cliques | `clicks` | Total de cliques |
-| CTR | `ctr` | Click-Through Rate (%) |
-| CPM | `cpm` | Custo por Mil Impressões |
-| CPC | `cpc` | Custo por Clique |
-| Gasto | `spend` | Valor total gasto |
-| Conversões | `actions` | Array JSON de ações (JSON) |
-| ROAS | `roas` | Return on Ad Spend |
-| Frequência | `frequency` | Média de vezes que cada pessoa viu o anúncio |
-| Alcance | `reach` | Pessoas únicas alcançadas |
-
-## Breakdowns Suportados
-
-- `age` — Faixa etária
-- `gender` — Gênero
-- `publisher_platform` — Plataforma (Facebook, Instagram, Audience Network)
-- `platform_position` — Posicionamento
-- `impression_device` — Dispositivo
-
-## Comandos Úteis
-
-```bash
-npm run dev        # Desenvolvimento
-npm run build      # Build de produção
-npm run lint       # Lint do código
-```
-
-## Como Fazer o Deploy no Vercel
-
-### 1. Criar o Repositório no GitHub
-Como o Git local já está inicializado e configurado com a branch `main` e a origem `sc4uthwith4`, basta seguir estes passos:
-1. Vá até o seu GitHub e crie um novo repositório chamado `saas-ads-metrics`.
-2. Após criar, execute o seguinte comando no terminal do seu computador para enviar o código:
-   ```bash
-   git push -u origin main
-   ```
-
-### 2. Importar no Vercel
-1. Vá para o painel do [Vercel](https://vercel.com) e clique em **Add New... → Project**.
-2. Conecte sua conta do GitHub e importe o repositório `saas-ads-metrics`.
-3. Nas configurações do projeto (antes de clicar em Deploy), abra a seção **Environment Variables** (Variáveis de Ambiente) e adicione as seguintes chaves do seu arquivo `.env.local`:
-   - `FACEBOOK_ACCESS_TOKEN`
-   - `FACEBOOK_AD_ACCOUNT_ID`
-   - `NEXT_PUBLIC_SUPABASE_URL`
-   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-   - `SUPABASE_SERVICE_ROLE_KEY`
-   - `SYNC_SECRET` (segredo opcional para proteger o endpoint de sincronização)
-4. Clique em **Deploy**. A plataforma do Vercel fará a compilação e disponibilizará seu dashboard online em poucos segundos.
+- Login com Facebook (OAuth) no lugar de colar o token
+- Criação completa de anúncio (público + criativo)
+- Rate limiting com store compartilhado (Redis) para escalar entre instâncias serverless

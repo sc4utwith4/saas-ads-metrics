@@ -12,12 +12,13 @@ export const maxDuration = 60;
 
 export async function GET(req: NextRequest) {
   const secret = process.env.CRON_SECRET;
-  // Em produção o Vercel envia Authorization: Bearer <CRON_SECRET>
-  if (secret) {
-    const auth = req.headers.get('authorization');
-    if (auth !== `Bearer ${secret}`) {
-      return NextResponse.json({ error: 'Não autorizado.' }, { status: 401 });
-    }
+  // Em produção o Vercel envia Authorization: Bearer <CRON_SECRET>.
+  // Sem segredo configurado, só libera fora de produção.
+  const authorized = secret
+    ? req.headers.get('authorization') === `Bearer ${secret}`
+    : process.env.NODE_ENV !== 'production';
+  if (!authorized) {
+    return NextResponse.json({ error: 'Não autorizado.' }, { status: 401 });
   }
 
   try {
